@@ -46,6 +46,8 @@ export function CalculatorPage({ initialScenario, onSaved }: {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   // Load initial scenario for editing
   useEffect(() => {
@@ -106,6 +108,48 @@ export function CalculatorPage({ initialScenario, onSaved }: {
       financial,
     };
   }, [results, name, loanAmount, annualInterestRate, loanTermMonths, financial]);
+
+  const handleAIAnalysis = async () => {
+  if (!results) return;
+
+  setLoadingAI(true);
+  setAiAnalysis(null);
+
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      "loan-insights",
+      {
+        body: {
+          loanAmount: parseFloat(loanAmount),
+          interestRate: parseFloat(annualInterestRate),
+          termMonths: loanTermMonths,
+          monthlyIncome: monthlyIncome
+            ? parseFloat(monthlyIncome)
+            : null,
+          existingDebt: existingMonthlyDebt
+            ? parseFloat(existingMonthlyDebt)
+            : null,
+          monthlyPayment: results.monthlyPayment,
+        },
+      }
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    setAiAnalysis(data.analysis);
+
+  } catch (err) {
+  console.error("AI Function Error:", err);
+
+  setAiAnalysis(
+    err instanceof Error
+      ? err.message
+      : "Unable to generate AI analysis."
+  );
+}
+};
 
   const handleSave = async () => {
     if (!results || !user) return;
@@ -304,6 +348,9 @@ export function CalculatorPage({ initialScenario, onSaved }: {
           <Button onClick={handleSave} disabled={!results || saveStatus === 'saving'}>
             {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? <><Check className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> {editingId ? 'Update' : 'Save'} Scenario</>}
           </Button>
+          <Button variant="secondary" onClick={handleAIAnalysis} disabled={!results || loadingAI}>
+          {loadingAI ? "Analyzing..." : "AI Loan Insights"}
+          </Button>
           <Button variant="secondary" onClick={handleAddToComparison} disabled={!results}>
             <Plus className="w-4 h-4" /> Add to Comparison
           </Button>
@@ -335,6 +382,20 @@ export function CalculatorPage({ initialScenario, onSaved }: {
           <StatCard label="Payoff Date" value={formatDateLong(results.payoffDate)} icon={<Calendar className="w-4 h-4" />} accent="success" />
         </div>
       )}
+
+      {aiAnalysis && (
+    <Card className="animate-fade-in">
+    <CardHeader
+      title="AI Loan Advisor"
+      subtitle="Personalized financial analysis"
+      icon={<Scale className="w-5 h-5" />}
+    />
+
+    <div className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
+      {aiAnalysis}
+    </div>
+    </Card>
+    )}
 
       {/* Financial Summary */}
       {results && (monthlyIncome || existingMonthlyDebt) && (
